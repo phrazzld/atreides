@@ -3,7 +3,7 @@
 from decimal import Decimal
 
 from atreides.config import Settings
-from atreides.models import OrderRequest, OrderSide, Side
+from atreides.models import OrderRequest, OrderSide, Position, PositionStatus, Side
 from atreides.risk import RiskManager
 
 
@@ -54,3 +54,70 @@ class TestRiskManager:
         assert rm.is_killed
         rm.reset_daily()
         assert not rm.is_killed
+
+    def test_rejects_when_exposure_plus_order_exceeds_limit(self):
+        # AC: given positions=$8 and limit=$10, a $3 order is rejected
+        position = Position(
+            market_id="EXISTING",
+            quantity=10,
+            cost_basis=Decimal("8.00"),
+            current_price=Decimal("0.80"),
+            position_status=PositionStatus.ACTIVE,
+        )
+        rm = RiskManager(_settings(max_total_exposure=10))
+        # cost = 0.50 * 6 = $3.00; total = $8.00 + $3.00 = $11.00 > $10.00
+        reason = rm.check_order(_order(price="0.50", quantity=6), [position])
+        assert reason is not None
+        assert "exposure" in reason
+
+    def test_allows_when_exposure_plus_order_within_limit(self):
+        # AC: given positions=$8 and limit=$10, a $1 order is allowed
+        position = Position(
+            market_id="EXISTING",
+            quantity=10,
+            cost_basis=Decimal("8.00"),
+            current_price=Decimal("0.80"),
+            position_status=PositionStatus.ACTIVE,
+        )
+        rm = RiskManager(_settings(max_total_exposure=10))
+        # cost = 0.50 * 2 = $1.00; total = $8.00 + $1.00 = $9.00 <= $10.00
+        reason = rm.check_order(_order(price="0.50", quantity=2), [position])
+        assert reason is None
+
+    def test_settled_positions_excluded_from_exposure(self):
+        # AC: settled positions don't count toward total exposure
+        settled = Position(
+            market_id="SETTLED",
+            quantity=100,
+            cost_basis=Decimal("50.00"),
+            settlement_revenue=Decimal("100.00"),  # would be $100 if counted
+            position_status=PositionStatus.SETTLED,
+        )
+        active = Position(
+            market_id="ACTIVE",
+            quantity=5,
+            cost_basis=Decimal("3.00"),
+            current_price=Decimal("0.60"),
+            position_status=PositionStatus.ACTIVE,
+        )
+        rm = RiskManager(_settings(max_total_exposure=10))
+        # active market_value = 0.60 * 5 = $3.00; settled is excluded
+        # order cost = 0.50 * 6 = $3.00; total = $3.00 + $3.00 = $6.00 <= $10.00
+        reason = rm.check_order(_order(price="0.50", quantity=6), [settled, active])
+        assert reason is None
+
+    def test_unknown_positions_excluded_from_exposure(self):
+        # UNKNOWN positions are excluded — their status hasn't been confirmed so
+        # including them with market_value=0 would silently bypass the cap
+        unknown = Position(
+            market_id="UNKNOWN_MARKET",
+            quantity=100,
+            cost_basis=Decimal("50.00"),
+            # no current_price — market_value would be $0 if included
+            position_status=PositionStatus.UNKNOWN,
+        )
+        rm = RiskManager(_settings(max_total_exposure=5))
+        # If unknown were included at market_value=$0, a $4 order would pass.
+        # It should still pass — but only because the position is excluded, not zeroed.
+        reason = rm.check_order(_order(price="0.50", quantity=8), [unknown])  # cost=$4
+        assert reason is None

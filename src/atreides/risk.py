@@ -6,7 +6,7 @@ import logging
 from decimal import Decimal
 
 from atreides.config import Settings
-from atreides.models import OrderRequest, Position
+from atreides.models import OrderRequest, Position, PositionStatus
 
 log = logging.getLogger(__name__)
 
@@ -37,8 +37,9 @@ class RiskManager:
                 f"Order cost ${cost:.2f} exceeds per-market limit ${self.max_position_per_market}"
             )
 
-        # Total exposure
-        total = sum(abs(p.net_exposure) * p.avg_price for p in positions) + cost
+        # Total exposure — only positions with confirmed ACTIVE status carry risk
+        active = [p for p in positions if p.position_status == PositionStatus.ACTIVE]
+        total = sum(p.market_value for p in active) + cost
         if total > self.max_total_exposure:
             return f"Total exposure ${total:.2f} would exceed limit ${self.max_total_exposure}"
 
