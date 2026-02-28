@@ -11,6 +11,7 @@ from kalshi_python import Configuration
 from kalshi_python import KalshiClient as KalshiApiClient
 from kalshi_python.api.markets_api import MarketsApi
 from kalshi_python.api.portfolio_api import PortfolioApi
+from kalshi_python.exceptions import ApiException
 
 from atreides.config import Settings
 from atreides.models import (
@@ -66,6 +67,13 @@ class KalshiExchange:
         self._markets = None
         self._portfolio = None
 
+    async def __aenter__(self) -> KalshiExchange:
+        await self.connect()
+        return self
+
+    async def __aexit__(self, *args: object) -> None:
+        await self.close()
+
     def _require_client(self) -> KalshiApiClient:
         if self._client is None:
             raise RuntimeError("Not connected. Call connect() first.")
@@ -108,7 +116,7 @@ class KalshiExchange:
         """
         try:
             return await self.get_market(market_id)
-        except Exception:
+        except (ApiException, ValueError):
             pass
         # Fallback: raw HTTP request, bypass SDK validation
         return await self._get_market_raw(market_id)
@@ -133,7 +141,7 @@ class KalshiExchange:
                 status=m.get("status", "unknown"),
                 exchange="kalshi",
             )
-        except Exception:
+        except (ApiException, json.JSONDecodeError):
             log.debug("Raw market fetch failed for %s", ticker)
             return None
 
