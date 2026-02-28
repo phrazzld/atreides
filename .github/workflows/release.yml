@@ -23,3 +23,4 @@ jobs:
         uses: misty-step/landfall@master
         with:
           github-token: ${{ secrets.GH_RELEASE_TOKEN }}
+          llm-api-key: ${{ secrets.OPENROUTER_API_KEY }}
