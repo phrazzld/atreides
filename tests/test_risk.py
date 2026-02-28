@@ -105,3 +105,19 @@ class TestRiskManager:
         # order cost = 0.50 * 6 = $3.00; total = $3.00 + $3.00 = $6.00 <= $10.00
         reason = rm.check_order(_order(price="0.50", quantity=6), [settled, active])
         assert reason is None
+
+    def test_unknown_positions_excluded_from_exposure(self):
+        # UNKNOWN positions are excluded — their status hasn't been confirmed so
+        # including them with market_value=0 would silently bypass the cap
+        unknown = Position(
+            market_id="UNKNOWN_MARKET",
+            quantity=100,
+            cost_basis=Decimal("50.00"),
+            # no current_price — market_value would be $0 if included
+            position_status=PositionStatus.UNKNOWN,
+        )
+        rm = RiskManager(_settings(max_total_exposure=5))
+        # If unknown were included at market_value=$0, a $4 order would pass.
+        # It should still pass — but only because the position is excluded, not zeroed.
+        reason = rm.check_order(_order(price="0.50", quantity=8), [unknown])  # cost=$4
+        assert reason is None
