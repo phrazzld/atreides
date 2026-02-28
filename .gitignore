@@ -9,7 +9,8 @@ wheels/
 # Virtual environments
 .venv
 data/
-.env
+.env*
+!.env.example
 atreides.txt
 __pycache__/
 *.egg-info/
