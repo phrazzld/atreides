@@ -23,9 +23,7 @@ def _make_exchange() -> KalshiExchange:
 
 async def _markets_cmd(limit: int = 20, status: str = "open") -> None:
     """List active markets."""
-    ex = _make_exchange()
-    await ex.connect()
-    try:
+    async with _make_exchange() as ex:
         markets = await ex.get_markets(limit=limit, status=status)
         table = Table(title=f"Kalshi Markets ({status})", expand=True)
         table.add_column("Ticker", style="cyan", no_wrap=True, ratio=1)
@@ -46,15 +44,11 @@ async def _markets_cmd(limit: int = 20, status: str = "open") -> None:
             )
         console.print(table)
         console.print(f"\n[dim]{len(markets)} markets shown[/dim]")
-    finally:
-        await ex.close()
 
 
 async def _book_cmd(ticker: str) -> None:
     """Show orderbook for a market."""
-    ex = _make_exchange()
-    await ex.connect()
-    try:
+    async with _make_exchange() as ex:
         market = await ex.get_market(ticker)
         book = await ex.get_orderbook(ticker)
 
@@ -79,59 +73,52 @@ async def _book_cmd(ticker: str) -> None:
 
         if book.mid is not None:
             console.print(f"\nMid: [bold]${book.mid:.2f}[/bold]  Spread: ${book.spread:.2f}")
-    finally:
-        await ex.close()
 
 
 async def _watch_cmd(ticker: str, interval: float = 2.0) -> None:
     """Stream price updates for a market."""
-    ex = _make_exchange()
-    await ex.connect()
-    try:
-        market = await ex.get_market(ticker)
-        console.print(f"[bold]Watching: {market.title}[/bold]")
-        console.print(f"[dim]Ctrl+C to stop. Polling every {interval}s[/dim]\n")
+    async with _make_exchange() as ex:
+        try:
+            market = await ex.get_market(ticker)
+            console.print(f"[bold]Watching: {market.title}[/bold]")
+            console.print(f"[dim]Ctrl+C to stop. Polling every {interval}s[/dim]\n")
 
-        table = Table()
-        table.add_column("Time")
-        table.add_column("Bid", style="green")
-        table.add_column("Ask", style="red")
-        table.add_column("Mid", style="bold")
-        table.add_column("Spread", style="yellow")
+            table = Table()
+            table.add_column("Time")
+            table.add_column("Bid", style="green")
+            table.add_column("Ask", style="red")
+            table.add_column("Mid", style="bold")
+            table.add_column("Spread", style="yellow")
 
-        with Live(table, console=console, refresh_per_second=1) as live:
-            while True:
-                book = await ex.get_orderbook(ticker)
-                now = time.strftime("%H:%M:%S")
+            with Live(table, console=console, refresh_per_second=1) as live:
+                while True:
+                    book = await ex.get_orderbook(ticker)
+                    now = time.strftime("%H:%M:%S")
 
-                table = Table(title=f"{market.ticker} — Live")
-                table.add_column("Time")
-                table.add_column("Bid", style="green")
-                table.add_column("Ask", style="red")
-                table.add_column("Mid", style="bold")
-                table.add_column("Spread", style="yellow")
+                    table = Table(title=f"{market.ticker} — Live")
+                    table.add_column("Time")
+                    table.add_column("Bid", style="green")
+                    table.add_column("Ask", style="red")
+                    table.add_column("Mid", style="bold")
+                    table.add_column("Spread", style="yellow")
 
-                bid = f"${book.best_bid:.2f}" if book.best_bid else "—"
-                ask = f"${book.best_ask:.2f}" if book.best_ask else "—"
-                mid = f"${book.mid:.2f}" if book.mid else "—"
-                spread = f"${book.spread:.2f}" if book.spread else "—"
-                table.add_row(now, bid, ask, mid, spread)
+                    bid = f"${book.best_bid:.2f}" if book.best_bid else "—"
+                    ask = f"${book.best_ask:.2f}" if book.best_ask else "—"
+                    mid = f"${book.mid:.2f}" if book.mid else "—"
+                    spread = f"${book.spread:.2f}" if book.spread else "—"
+                    table.add_row(now, bid, ask, mid, spread)
 
-                live.update(table)
-                await asyncio.sleep(interval)
-    except KeyboardInterrupt:
-        console.print("\n[dim]Stopped.[/dim]")
-    finally:
-        await ex.close()
+                    live.update(table)
+                    await asyncio.sleep(interval)
+        except KeyboardInterrupt:
+            console.print("\n[dim]Stopped.[/dim]")
 
 
 async def _balance_cmd() -> None:
     """Show account balance and portfolio."""
     from atreides.models import PositionStatus
 
-    ex = _make_exchange()
-    await ex.connect()
-    try:
+    async with _make_exchange() as ex:
         balance = await ex.get_balance()
         positions = await ex.get_positions()
 
@@ -177,8 +164,6 @@ async def _balance_cmd() -> None:
             f"  Settled P&L:      [{pnl_style}]${settled_pnl:+.2f}[/{pnl_style}]"
             f"  ({len(settled)} markets)"
         )
-    finally:
-        await ex.close()
 
 
 def _usage() -> None:

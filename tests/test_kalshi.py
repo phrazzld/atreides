@@ -95,6 +95,13 @@ class TestKalshiExchange:
         assert book.yes_bids[0].quantity == 10
 
     @pytest.mark.asyncio
+    async def test_context_manager_connects_and_closes(self, exchange):
+        with patch("atreides.exchange.kalshi.KalshiApiClient"):
+            async with exchange as ex:
+                assert ex._client is not None
+            assert ex._client is None
+
+    @pytest.mark.asyncio
     async def test_place_order_not_implemented(self, exchange):
         with patch("atreides.exchange.kalshi.MarketsApi"):
             await exchange.connect()
